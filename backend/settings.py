@@ -56,9 +56,10 @@ MIDDLEWARE = [
 ]
 
 
-CORS_ALLOW_ALL_ORIGINS = True
+# settings.py - Recommended for production
+CORS_ALLOW_ALL_ORIGINS = False  # Change this
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # For local development
+    "http://localhost:3000",
     "https://baptist-point-wallet-frontend.onrender.com"
 ]
 CORS_ALLOW_CREDENTIALS = True
