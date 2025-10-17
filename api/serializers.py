@@ -238,6 +238,20 @@ class AwardPointsResponseSerializer(serializers.Serializer):
     new_balance = serializers.IntegerField()
     transaction = WalletTransactionSerializer()
 
+class TeacherStatsSerializer(serializers.Serializer):
+    teacher = serializers.DictField()
+    stats = serializers.DictField()
+    trends = serializers.DictField()
+
+class RecentTransactionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    studentName = serializers.CharField()
+    type = serializers.CharField()
+    amount = serializers.IntegerField()
+    reason = serializers.CharField()
+    timestamp = serializers.CharField()
+    teacherAction = serializers.BooleanField()
+
 #HELPERS
 def generate_qr_image(qr_value: str):
         """Generate a QR code image with custom colors and zero margins."""
