@@ -211,17 +211,24 @@ class QRStudentSerializer(serializers.ModelSerializer):
 
 
 class AwardPointsSerializer(serializers.Serializer):
-    """Serializer for awarding points - validates input"""
     student_id = serializers.IntegerField()
     points = serializers.IntegerField(min_value=1)
     reason = serializers.CharField(max_length=500)
-
-    def validate_points(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("Points must be greater than 0")
-        if value > 1000:  # Optional: set a max limit
-            raise serializers.ValidationError("Cannot award more than 1000 points at once")
-        return value
+    is_deduction = serializers.BooleanField(default=False)  # NEW FIELD
+    
+    def validate(self, data):
+        if data.get('is_deduction', False):
+            # Validate student has enough balance
+            try:
+                student = User.objects.get(id=data['student_id'], user_type=2)
+                wallet = Wallet.objects.get(user=student)
+                if wallet.balance < data['points']:
+                    raise serializers.ValidationError(
+                        f"Insufficient balance. Student only has {wallet.balance} points"
+                    )
+            except (User.DoesNotExist, Wallet.DoesNotExist):
+                raise serializers.ValidationError("Student or wallet not found")
+        return data
 
     def validate_student_id(self, value):
         try:

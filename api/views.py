@@ -90,9 +90,14 @@ class StudentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='award-points')
     def award_points(self, request):
         """
-        Custom action to award points to a student
+        Custom action to award or deduct points from a student
         POST /api/students/award-points/
-        Body: { "student_id": 1, "points": 50, "reason": "Great work!" }
+        Body: { 
+            "student_id": 1, 
+            "points": 50, 
+            "reason": "Great work!",
+            "is_deduction": false  # Optional, defaults to false
+        }
         """
         # Validate input using serializer
         input_serializer = AwardPointsSerializer(data=request.data)
@@ -106,6 +111,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         student_id = validated_data['student_id']
         points = validated_data['points']
         reason = validated_data['reason']
+        is_deduction = validated_data.get('is_deduction', False)
         
         # Check if requester is a teacher
         teacher = request.user
@@ -122,24 +128,45 @@ class StudentViewSet(viewsets.ModelViewSet):
             # Get or create wallet
             wallet, _ = Wallet.objects.get_or_create(user=student)
             
-            # Update balance
-            wallet.balance += points
+            # Validate sufficient balance for deductions
+            if is_deduction and wallet.balance < points:
+                return Response(
+                    {
+                        'error': f'Insufficient balance. Student only has {wallet.balance} points, cannot deduct {points} points.',
+                        'current_balance': wallet.balance
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update balance based on mode
+            if is_deduction:
+                wallet.balance -= points
+                transaction_type = 'spend'
+                action_verb = 'Deducted'
+                description = f"Purchase from {teacher.first_name} {teacher.last_name}: {reason}"
+            else:
+                wallet.balance += points
+                transaction_type = 'earn'
+                action_verb = 'Awarded'
+                description = f"Awarded by {teacher.first_name} {teacher.last_name}: {reason}"
+            
             wallet.save()
             
             # Create transaction record
             transaction = WalletTransaction.objects.create(
                 wallet=wallet,
                 amount=points,
-                transaction_type='earn',
-                description=f"Awarded by {teacher.first_name} {teacher.last_name}: {reason}"
+                transaction_type=transaction_type,
+                description=description
             )
             
-            # Create QR scan log
-            QRScanLog.objects.create(
-                user=student,
-                scanned_by=teacher,
-                points_given=points
-            )
+            # Create QR scan log (only for awards, not deductions)
+            if not is_deduction:
+                QRScanLog.objects.create(
+                    user=student,
+                    scanned_by=teacher,
+                    points_given=points
+                )
             
             # Update student's last activity
             try:
@@ -155,16 +182,17 @@ class StudentViewSet(viewsets.ModelViewSet):
             # Build response
             response_data = {
                 'success': True,
-                'message': f'Successfully awarded {points} points to {student.first_name} {student.last_name}',
+                'message': f'Successfully {action_verb.lower()} {points} points {"from" if is_deduction else "to"} {student.first_name} {student.last_name}',
                 'new_balance': wallet.balance,
-                'transaction': transaction_serializer.data
+                'transaction': transaction_serializer.data,
+                'is_deduction': is_deduction
             }
             
             return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
             return Response(
-                {'error': f'Failed to award points: {str(e)}'}, 
+                {'error': f'Failed to {"deduct" if is_deduction else "award"} points: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
